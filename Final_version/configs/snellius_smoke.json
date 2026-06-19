@@ -1,0 +1,36 @@
+{
+  "datasets": ["elliptic"],
+  "models": ["GAT"],
+  "llms": ["Qwen/Qwen2.5-3B"],
+  "experiments": ["reconstruction_1hop"],
+  "train": {
+    "lr": 0.01,
+    "epochs": 10,
+    "print_every": 1,
+    "patience": null
+  },
+  "target_node_pool": "test",
+  "target_node_sampling": "random",
+  "num_target_nodes": 1,
+  "num_hops": 2,
+  "extract_workers": 1,
+  "reconstruction": {
+    "candidate_ratio": 4,
+    "max_candidates": 20,
+    "explainer_top_k": 5,
+    "explainer_min_score": null,
+    "include_explanation_mask": false,
+    "include_node_features": true,
+    "include_candidate_features": true,
+    "include_candidate_embeddings": true,
+    "candidate_context_mode": "pca",
+    "candidate_pca_components": 16,
+    "output_format": "json"
+  },
+  "generation": {
+    "max_new_tokens": 128,
+    "llm_batch_size": 1,
+    "continue_on_error": true
+  },
+  "large_graph_cpu_fallback": true
+}

@@ -2,7 +2,7 @@
 
 Minimal thesis codebase for running the GNN explanation and LLM evaluation pipeline.
 
-This repository intentionally contains only the core pipeline source files. Datasets, plots, notebooks, Slurm scripts, cached models, and generated outputs are not included.
+This repository intentionally contains the core pipeline source files plus one minimal Snellius job and example config. Datasets, plots, notebooks, cached models, and generated outputs are not included.
 
 ## Files
 
@@ -15,7 +15,10 @@ Final_version/
 ├── Extracion.py            # Prediction, explanation, embedding, and subgraph extraction
 ├── Parallel_Extraction.py  # Worker helper for parallel extraction
 ├── LLM_Module.py           # Prompt construction, LLM inference, and response parsing
-└── Evalueation.py          # Metrics and result saving
+├── Evalueation.py          # Metrics and result saving
+└── configs/
+    └── snellius_smoke.json # Small example config for cluster runs
+run_snellius.job            # Minimal Slurm entry point
 ```
 
 ## Install
@@ -88,6 +91,23 @@ python main.py \
 ```
 
 Remove `--skip-llm --skip-eval` and set `--llms` for a full LLM run.
+
+## Snellius Run
+
+Submit from the repository root:
+
+```bash
+sbatch run_snellius.job
+```
+
+Useful overrides:
+
+```bash
+CONDA_ENV=ethfraud_clean RUN_LLM=false sbatch run_snellius.job
+CONFIG_PATH=Final_version/configs/snellius_smoke.json sbatch run_snellius.job
+```
+
+Edit `Final_version/configs/snellius_smoke.json` for larger experiments, more target nodes, other datasets, other GNNs, or other LLMs.
 
 ## Notes
 

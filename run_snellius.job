@@ -1,0 +1,91 @@
+#!/bin/bash
+#SBATCH --job-name=gnn_llm_smoke
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+#SBATCH --partition=gpu_h100
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=04:00:00
+
+set -Eeuo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
+CONDA_ENV="${CONDA_ENV:-ethfraud_clean}"
+CONFIG_PATH="${CONFIG_PATH:-Final_version/configs/snellius_smoke.json}"
+OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_DIR/outputs/snellius_smoke_${SLURM_JOB_ID:-manual}}"
+DEVICE="${DEVICE:-cuda}"
+SEED="${SEED:-42}"
+RUN_LLM="${RUN_LLM:-true}"
+TIMEOUT="${TIMEOUT:-}"
+
+cd "$PROJECT_DIR"
+mkdir -p logs "$OUTPUT_DIR"
+
+if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+else
+    echo "ERROR: missing conda setup at $HOME/miniconda3/etc/profile.d/conda.sh" >&2
+    exit 2
+fi
+conda activate "$CONDA_ENV"
+
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export HF_HOME="${HF_HOME:-/scratch-shared/$USER/huggingface}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-$HF_HOME/hub}"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HUGGINGFACE_HUB_CACHE"
+
+echo "Project: $PROJECT_DIR"
+echo "Config: $CONFIG_PATH"
+echo "Output: $OUTPUT_DIR"
+echo "Device: $DEVICE"
+echo "Run LLM: $RUN_LLM"
+python --version
+nvidia-smi || true
+
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "ERROR: missing config: $CONFIG_PATH" >&2
+    exit 3
+fi
+
+python -m py_compile \
+    Final_version/main.py \
+    Final_version/Data_File.py \
+    Final_version/GNN_Definition.py \
+    Final_version/Train.py \
+    Final_version/Extracion.py \
+    Final_version/Parallel_Extraction.py \
+    Final_version/LLM_Module.py \
+    Final_version/Evalueation.py
+
+python Final_version/main.py --dry-run \
+    --config "$CONFIG_PATH" \
+    --device "$DEVICE" \
+    --output-dir "$OUTPUT_DIR"
+
+EXTRA_ARGS=()
+case "${RUN_LLM,,}" in
+    0|false|no|n)
+        EXTRA_ARGS=(--skip-llm --skip-eval)
+        ;;
+esac
+
+RUN_PREFIX=()
+if [ -n "$TIMEOUT" ] && command -v timeout >/dev/null 2>&1; then
+    RUN_PREFIX=(timeout "$TIMEOUT")
+fi
+
+"${RUN_PREFIX[@]}" python Final_version/main.py \
+    --config "$CONFIG_PATH" \
+    --device "$DEVICE" \
+    --seed "$SEED" \
+    --output-dir "$OUTPUT_DIR" \
+    "${EXTRA_ARGS[@]}"
+
+echo "Finished. Output files:"
+find "$OUTPUT_DIR" -maxdepth 1 -type f -print | sort
