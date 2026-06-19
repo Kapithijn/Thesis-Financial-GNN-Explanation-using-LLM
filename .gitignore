@@ -1,0 +1,68 @@
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Runtime caches
+.cache/
+.mpl_cache/
+hf_cache/
+
+# Slurm and logs
+logs/
+*.out
+*.err
+slurm-*.out
+
+# Generated outputs
+outputs/
+plots/
+figures/
+academic_plots_*/
+summary_plots_*/
+latex_pngs_*/
+thesis_results_*/
+overleaf_upload_*/
+*.zip
+
+Final_version/outputs/
+Final_version/plots/
+Final_version/figures/
+Final_version/academic_plots_*/
+Final_version/summary_plots_*/
+Final_version/latex_pngs_*/
+Final_version/thesis_results_*/
+Final_version/overleaf_upload_*/
+
+# Large model/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Dataset contents are intentionally excluded.
+Final_version/data/*/*
+!Final_version/data/*/raw/
+!Final_version/data/*/processed/
+Final_version/data/*/raw/*
+Final_version/data/*/processed/*
+!Final_version/data/README.md
+!Final_version/data/*/raw/.gitkeep
+!Final_version/data/*/processed/.gitkeep
+
+# Notebooks are excluded from the clean runnable base.
+*.ipynb

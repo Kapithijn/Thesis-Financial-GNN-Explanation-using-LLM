@@ -1,0 +1,15 @@
+torch
+torch-geometric
+transformers
+accelerate
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+tqdm
+PyYAML
+
+# Optional helpers:
+# dgl        # required only for loading raw T-Finance DGL graph files
+# kaggle     # required only if downloading IBM AML through the Kaggle CLI

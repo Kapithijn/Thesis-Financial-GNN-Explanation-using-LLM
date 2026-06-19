@@ -1,0 +1,178 @@
+#!/bin/bash
+#SBATCH --job-name=aml_hi_smoke
+#SBATCH --output=%x_%j.out
+#SBATCH --error=%x_%j.err
+#SBATCH --partition=gpu_h100
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=04:00:00
+
+set -Eeuo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:-/scratch-shared/$USER/Explanation-of-GNN-using-LLM}"
+CONDA_ENV="${CONDA_ENV:-ethfraud_clean}"
+
+AML_MAX_ROWS="${AML_MAX_ROWS:-full}"
+if [ "${AML_MAX_ROWS,,}" = "full" ] || [ "${AML_MAX_ROWS,,}" = "none" ]; then
+    AML_MAX_ROWS_JSON=null
+else
+    AML_MAX_ROWS_JSON="$AML_MAX_ROWS"
+fi
+AML_MAX_EDGES_PER_ACCOUNT="${AML_MAX_EDGES_PER_ACCOUNT:-200}"
+MODEL="${MODEL:-GAT}"
+LLM="${LLM:-Qwen/Qwen2.5-3B}"
+EXPERIMENTS="${EXPERIMENTS:-reconstruction_1hop}"
+NUM_TARGET_NODES="${NUM_TARGET_NODES:-2}"
+NUM_HOPS="${NUM_HOPS:-2}"
+EXTRACT_WORKERS="${EXTRACT_WORKERS:-1}"
+DEVICE="${DEVICE:-cuda}"
+SEED="${SEED:-42}"
+TRAIN_EPOCHS="${TRAIN_EPOCHS:-20}"
+MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-128}"
+LLM_BATCH_SIZE="${LLM_BATCH_SIZE:-1}"
+MAX_CANDIDATES="${MAX_CANDIDATES:-20}"
+CANDIDATE_CONTEXT_MODE="${CANDIDATE_CONTEXT_MODE:-pca}"
+CANDIDATE_PCA_COMPONENTS="${CANDIDATE_PCA_COMPONENTS:-16}"
+SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-3h}"
+RUN_LLM="${RUN_LLM:-true}"
+
+OUTPUT_DIR="${OUTPUT_DIR:-$PROJECT_DIR/outputs/aml_hi_small_smoke_${SLURM_JOB_ID:-manual}}"
+CONFIG_PATH="$OUTPUT_DIR/aml_hi_small_config.json"
+
+on_exit() {
+    exit_code=$1
+    echo "============================================================"
+    echo "AML HI-Small smoke finished with exit code: $exit_code"
+    echo "Time: $(date)"
+    echo "Output dir: $OUTPUT_DIR"
+    echo "Config: $CONFIG_PATH"
+    if [ -d "$OUTPUT_DIR" ]; then
+        find "$OUTPUT_DIR" -maxdepth 1 -type f -print | sort
+    fi
+    echo "============================================================"
+}
+trap 'on_exit $?' EXIT
+
+cd "$PROJECT_DIR"
+mkdir -p "$OUTPUT_DIR"
+
+if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+else
+    echo "ERROR: missing conda.sh at $HOME/miniconda3/etc/profile.d/conda.sh" >&2
+    exit 2
+fi
+conda activate "$CONDA_ENV"
+
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export HF_HOME="${HF_HOME:-/scratch-shared/$USER/huggingface}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-$HF_HOME/hub}"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HUGGINGFACE_HUB_CACHE"
+
+AML_RAW_CSV="Final_version/data/ibm_aml_dataset/raw/HI-Small_Trans.csv"
+AML_RAW_ZIP="Final_version/data/ibm_aml_dataset/raw/HI-Small_Trans.csv.zip"
+if [ ! -f "$AML_RAW_CSV" ] && [ ! -f "$AML_RAW_ZIP" ]; then
+    echo "ERROR: missing IBM AML HI-Small transaction file." >&2
+    echo "Expected one of:" >&2
+    echo "  $AML_RAW_CSV" >&2
+    echo "  $AML_RAW_ZIP" >&2
+    exit 3
+fi
+
+cat > "$CONFIG_PATH" <<JSON
+{
+  "datasets": ["ibm_aml_hi_small"],
+  "models": ["$MODEL"],
+  "llms": ["$LLM"],
+  "experiments": ["$EXPERIMENTS"],
+  "dataset_kwargs": {
+    "ibm_aml_hi_small": {
+      "max_rows": $AML_MAX_ROWS_JSON,
+      "max_edges_per_account": $AML_MAX_EDGES_PER_ACCOUNT,
+      "cache_processed": true
+    }
+  },
+  "train": {
+    "lr": 0.01,
+    "epochs": $TRAIN_EPOCHS,
+    "print_every": 1,
+    "patience": null
+  },
+  "target_node_pool": "test",
+  "target_node_sampling": "random",
+  "num_target_nodes": $NUM_TARGET_NODES,
+  "num_hops": $NUM_HOPS,
+  "extract_workers": $EXTRACT_WORKERS,
+  "reconstruction": {
+    "candidate_ratio": 4,
+    "max_candidates": $MAX_CANDIDATES,
+    "explainer_top_k": 5,
+    "explainer_min_score": null,
+    "include_node_features": true,
+    "include_candidate_features": true,
+    "include_candidate_embeddings": true,
+    "candidate_context_mode": "$CANDIDATE_CONTEXT_MODE",
+    "candidate_pca_components": $CANDIDATE_PCA_COMPONENTS,
+    "output_format": "json"
+  },
+  "generation": {
+    "max_new_tokens": $MAX_NEW_TOKENS,
+    "llm_batch_size": $LLM_BATCH_SIZE,
+    "continue_on_error": true
+  },
+  "large_graph_cpu_fallback": true
+}
+JSON
+
+echo "============================================================"
+echo "AML HI-Small smoke"
+echo "Job id: ${SLURM_JOB_ID:-manual}"
+echo "Host: $(hostname)"
+echo "Project: $PROJECT_DIR"
+echo "Rows: $AML_MAX_ROWS"
+echo "Model: $MODEL"
+echo "LLM: $LLM"
+echo "Experiments: $EXPERIMENTS"
+echo "Run LLM: $RUN_LLM"
+echo "Output dir: $OUTPUT_DIR"
+echo "============================================================"
+
+python --version
+python -m py_compile Final_version/main.py Final_version/Data_File.py
+
+python Final_version/main.py --dry-run \
+    --config "$CONFIG_PATH" \
+    --device "$DEVICE" \
+    --output-dir "$OUTPUT_DIR"
+
+RUN_PREFIX=()
+if command -v timeout >/dev/null 2>&1; then
+    RUN_PREFIX=(timeout "$SMOKE_TIMEOUT")
+fi
+
+if [ "${RUN_LLM,,}" = "true" ]; then
+    EXTRA_SKIP_ARGS=()
+else
+    EXTRA_SKIP_ARGS=(--skip-llm --skip-eval)
+fi
+
+"${RUN_PREFIX[@]}" python Final_version/main.py \
+    --config "$CONFIG_PATH" \
+    --device "$DEVICE" \
+    --seed "$SEED" \
+    --output-dir "$OUTPUT_DIR" \
+    "${EXTRA_SKIP_ARGS[@]}"
+
+if [ "${RUN_LLM,,}" = "true" ]; then
+    echo "Summary:"
+    cat "$OUTPUT_DIR/results_summary_reconstruction_1hop.json"
+    echo
+fi
+
+echo "AML HI-Small smoke completed."
