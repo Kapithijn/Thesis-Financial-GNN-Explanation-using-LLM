@@ -1,31 +1,24 @@
 # Explanation of GNN Predictions with LLMs
 
-This repository contains the runnable thesis code for experiments that combine graph neural networks, graph explanations, and large language models on financial fraud/anomaly graph datasets.
+Minimal thesis codebase for running the GNN explanation and LLM evaluation pipeline.
 
-Datasets and generated outputs are intentionally not included. Place datasets in the folders described below before running full experiments.
+This repository intentionally contains only the core pipeline source files. Datasets, plots, notebooks, Slurm scripts, cached models, and generated outputs are not included.
 
-## Repository Layout
+## Files
 
 ```text
-.
-├── Final_version/
-│   ├── main.py                         # Main pipeline entry point
-│   ├── Data_File.py                    # Dataset loaders and preprocessing
-│   ├── GNN_Definition.py               # GNN model definitions
-│   ├── Train.py                        # Training helpers
-│   ├── Extracion.py                    # GNNExplainer/subgraph extraction
-│   ├── Parallel_Extraction.py          # Multiprocessing extraction helper
-│   ├── LLM_Module.py                   # Prompting, generation, parsing
-│   ├── Evalueation.py                  # Evaluation and metrics
-│   ├── configs/                        # Example JSON configs
-│   ├── data/                           # Dataset placeholders only
-│   └── tests/                          # Unit tests
-├── *.job                               # Slurm job scripts for cluster runs
-├── requirements.txt
-└── README.md
+Final_version/
+├── main.py                 # Pipeline entry point and CLI
+├── Data_File.py            # Dataset loading and preprocessing
+├── GNN_Definition.py       # GCN, GAT, GIN, and GraphSAGE definitions
+├── Train.py                # GNN training and evaluation helpers
+├── Extracion.py            # Prediction, explanation, embedding, and subgraph extraction
+├── Parallel_Extraction.py  # Worker helper for parallel extraction
+├── LLM_Module.py           # Prompt construction, LLM inference, and response parsing
+└── Evalueation.py          # Metrics and result saving
 ```
 
-## Environment
+## Install
 
 Python 3.10 or newer is recommended.
 
@@ -36,11 +29,13 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-For GPU runs, install the `torch` build that matches your CUDA environment before installing the rest of the requirements. On Snellius or another cluster, using a Conda environment is usually easier.
+For GPU runs, install the `torch` build that matches your CUDA environment before installing the rest of the requirements.
 
 ## Datasets
 
-No datasets are committed to git. The expected locations are:
+Datasets are not committed. Create the needed folders locally under `Final_version/data/`.
+
+Common expected paths:
 
 ```text
 Final_version/data/elliptic_dataset/
@@ -50,42 +45,34 @@ Final_version/data/tfinance_dataset/raw/
 Final_version/data/ibm_aml_dataset/raw/HI-Small_Trans.csv.zip
 ```
 
-The Elliptic PyG datasets can be downloaded automatically by PyTorch Geometric when network access is available. DGraphFin, T-Finance, and IBM AML must usually be downloaded manually because they require external dataset access.
+The `.gitignore` prevents these dataset files from being committed.
 
-For IBM AML HI-Small, this helper can place the zip in the expected folder:
-
-```bash
-cd Final_version
-./download_ibm_aml_hi_small.sh
-```
-
-## Quick Checks
+## Quick Check
 
 From the repository root:
 
 ```bash
-python -m py_compile Final_version/main.py Final_version/LLM_Module.py Final_version/Extracion.py Final_version/Evalueation.py
-```
-
-Run unit tests from inside the code folder:
-
-```bash
-cd Final_version
-python -m unittest discover -s tests
+python -m py_compile \
+  Final_version/main.py \
+  Final_version/Data_File.py \
+  Final_version/GNN_Definition.py \
+  Final_version/Train.py \
+  Final_version/Extracion.py \
+  Final_version/Parallel_Extraction.py \
+  Final_version/LLM_Module.py \
+  Final_version/Evalueation.py
 ```
 
 ## Dry Run
 
-A dry run checks configuration and planned stages without loading data:
-
 ```bash
 cd Final_version
-python main.py --dry-run --config configs/aml_hi_small_mac_smoke.json --device cpu --output-dir outputs/dry_run
+python main.py --dry-run --device cpu --output-dir outputs/dry_run
 ```
 
-## Example Local Run
+## Example Run
 
-This runs the pipeline without LLM inference or evaluation, useful for checking data loading, training, and extraction first:
+This example runs data loading, training, and extraction while skipping LLM inference and final evaluation:
 
 ```bash
 cd Final_version
@@ -100,38 +87,14 @@ python main.py \
   --skip-eval
 ```
 
-Remove `--skip-llm --skip-eval` and set `--llms` when you want full LLM inference.
+Remove `--skip-llm --skip-eval` and set `--llms` for a full LLM run.
 
-## Slurm Runs
-
-The `.job` files are written for a project layout where this repository root contains `Final_version/main.py`.
-
-Example:
-
-```bash
-PROJECT_DIR=/scratch-shared/$USER/Explanation-of-GNN-using-LLM sbatch reconstruction_smoke.job
-```
-
-Adjust `PROJECT_DIR`, `CONDA_ENV`, dataset paths, and resource settings to match your cluster account.
-
-## Troubleshooting
+## Notes
 
 If `main.py` fails with `ModuleNotFoundError: No module named 'torch_geometric'`, install the dependencies in `requirements.txt` in the active environment.
 
-On some macOS Python environments, mixed scientific packages can trigger an OpenMP `libomp.dylib already initialized` error. A clean Conda environment is preferred. For a temporary local smoke check, prefix the command with:
+On some macOS environments, mixed scientific packages can trigger an OpenMP `libomp.dylib already initialized` error. A clean Conda environment is preferred. For a temporary local smoke check, prefix the command with:
 
 ```bash
-KMP_DUPLICATE_LIB_OK=TRUE python Final_version/main.py --dry-run --config Final_version/configs/aml_hi_small_mac_smoke.json
-```
-
-## Clean Git Upload
-
-Generated outputs, cached models, datasets, notebooks, plots, and local environment files are ignored by `.gitignore`.
-
-To initialize a clean repository:
-
-```bash
-git init
-git add .
-git commit -m "Initial clean thesis codebase"
+KMP_DUPLICATE_LIB_OK=TRUE python Final_version/main.py --dry-run --device cpu
 ```
